@@ -1,12 +1,12 @@
 
-//server for easy pbs v0.2
-//www.hbyunlin.com.cn
-//7/31/3024
+//server for easy pbs v0.3
+//www.bdyunmu.com
+//09/16/2015   	lihui@indiana.edu
 
 //1. memory management
 //	if msg send larger than 1MB
-//2. threading and task model 
-//3. Note use the memcpy rather than strncpy!
+//2. threading and task model
+//3. note use the memcpy rather than strncpy!
 //4. cannot connect to itself.
 //5. msg_send (2,1) is wrong while msg_send(1,2) is right, need to check!
 
@@ -51,7 +51,7 @@ extern epbs_host_info hostq[(MAX_NUM_HOSTS+1)];
 
 char *ips[(MAX_NUM_HOSTS+1)];
 char *hosts[(MAX_NUM_HOSTS+1)];  //server   hosts
-		  		 //hosts[0] super host
+		  		 //hosts[0] master nodes
 void *client_thread(void *arg)
 {
 
@@ -59,11 +59,11 @@ void *client_thread(void *arg)
 
 void epbssrv_configure(){
 
-	sprintf(hostfile,"hosts");	
+	sprintf(hostfile,"hosts");
 	host_configure("hosts");
 	hostq_init();
 
-	fprintf(stderr,"epbssrv_configure\n");
+	fprintf(stderr,"epbssrv_configure.\n");
 	
 	local_machine_stat = 0;
 	int i;
@@ -148,8 +148,8 @@ void deal_msg_request(){
 }
 
 
-void *host_stat_thread(void *argv){
-	host_stat();
+void *host_status_thread(void *argv){
+	host_status();
 }
 
 void *cancel_job_thread(void *argv){
@@ -172,8 +172,8 @@ void *job_queue_pop_thread(void *argv){
 	job_queue_pop();
 }//void
 
-void *job_stat_query_thread(void *argv){
-	job_stat_query();
+void *job_status_query_thread(void *argv){
+	job_status_query();
 }//void
 
 void *job_queue_result_thread(void *argv){
@@ -227,10 +227,10 @@ int main(int argc, char **argv){
 	pthread_create(&pid_job_monitor,NULL,job_monitor_thread,NULL);
 	pthread_create(&pid_job_push_queue, NULL, job_queue_push_thread, NULL);
 	pthread_create(&pid_job_pop_queue, NULL, job_queue_pop_thread, NULL);
-	pthread_create(&pid_job_query, NULL, job_stat_query_thread,NULL);
+	pthread_create(&pid_job_query, NULL, job_status_query_thread,NULL);
 	pthread_create(&pid_job_result,NULL, job_queue_result_thread,NULL);
 	pthread_create(&pid_host_query, NULL, host_query_thread,NULL);
-	pthread_create(&pid_host_stat, NULL, host_stat_thread,NULL);
+	pthread_create(&pid_host_stat, NULL, host_status_thread,NULL);
 	}//if
 
 	pthread_join(pid_job,NULL);
