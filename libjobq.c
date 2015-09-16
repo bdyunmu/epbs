@@ -1,7 +1,7 @@
 
 //host component for easy pbs v0.2
-//www.hbyunlin.com.cn
-//7/31/3024
+//www.bdyunmu.com
+//9/16/2015	lihui@indiana.edu
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,8 +42,14 @@ void * execl_thread(void *argv){
 			sleep(100);
                         msg_exit();
         }//if
-	execl(pcomm,NULL);	
-
+	char emptyargv[10];
+	sprintf(emptyargv,"");
+	pid_t pid = fork();
+	if(pid == 0){
+	execl(pcomm,emptyargv);	
+	}else{
+	printf("execl_thread is done.\n");
+	}
 }       //void
 
 void job_configure(){
@@ -258,7 +264,7 @@ void job_monitor(){
 	}//while
 }//
 
-void job_stat_query(){
+void job_status_query(){
 
 	int portnumber;
 	char pcomm[32];
