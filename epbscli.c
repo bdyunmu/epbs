@@ -1,7 +1,7 @@
 
 //client for easy pbs v0.2
-//www.hbyunlin.com.cn
-//7/31/3024
+//www.bdyunmu.com
+//10/02/2015
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,16 +9,22 @@
 #include <string.h>
 #include <netdb.h>
 #include <sys/types.h>
-#include <netinet/in.h> 
+#include <netinet/in.h>
 #include <sys/socket.h>
 
 #include <pthread.h>
 #include <unistd.h>
+#include <iostream>
+#include <string.h>
 
 #include "libmsg.h"
 #include "libhost.h"
 #include "libjobq.h"
 #include "libuser.h"
+
+#include "utransfer.h"
+#include "rusocket.h"
+#include "datatype.h"
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -29,8 +35,15 @@ extern int num_hosts;
 extern char hostname[64];
 extern char hostfile[64];
 
-char *hosts[(MAX_NUM_HOSTS+1)];
-char *ips[(MAX_NUM_HOSTS+1)];
+extern char *hosts[(MAX_NUM_HOSTS+1)];
+extern char *ips[(MAX_NUM_HOSTS+1)];
+void epbscli_init();
+void client_single_job_submit(int local_id, int remote_id, char *commstr, int num_req_nodes);
+void job_submit_exit();
+void client_cancel_job(int );
+void prog_2(int );
+void prog_3(int );
+void prog_4(int );
 
 int main(int argc, char **argv){
 
@@ -86,7 +99,7 @@ int main(int argc, char **argv){
 	case 1:
 	if(strlen(commstr)==1 || strlen(hostfile)==1){
 			fprintf(stderr,"usage:%s -hf hostfile -cs commstr -nn numnodes\n",argv[0]);
-			return;
+			return 0;
 	}else{
 	epbscli_init();
 	client_single_job_submit(local_id,1,commstr,num_req_nodes);
@@ -117,14 +130,14 @@ int main(int argc, char **argv){
 	void prog_2(int qj_id){
 
 	fprintf(stderr,"\t client query job stat:%d\n",qj_id);
-	int result = client_query_job_stat(qj_id);
+	int result = client_query_job_status(qj_id);
 
 	}//prog_2
 
 	void prog_3(int qh_id){
 	
 	fprintf(stderr,"\t client query host stat:%d\n",qh_id);
-	int result = client_query_host_stat(qh_id);
+	int result = client_query_host_status(qh_id);
 	
         }//prog_3
 	
@@ -161,21 +174,107 @@ int display_host_info(epbs_host_info *hosts){
 	}//for
 }//int
 
-int client_query_job_stat(int job_id){
-
+int client_query_job_status(int job_id){
+	//
 	//fprintf(stderr,"client_query_job_stat:%d\n",job_id);
-
+	//todo change the portnumber to UDP_JOB_MONITOR_SRV_PORT_NUMBER
+	//
+	
 	int portnumber = UDP_JOB_STAT_SRV_PORT_NUMBER;
+	portnumber = UDP_JOB_MONITOR_SRV_PORT_NUMBER;
+	int send_size;
 	char *send_buffer = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
 	int server_machine_id = 1;
 	*((int *)send_buffer) = MSG_TYPE_JOB_QUERY;
 	*((int *)send_buffer+1) = local_id;
 	*((int *)send_buffer+2) = server_machine_id;
 	*((int *)send_buffer+3) = job_id;
-	int nbytes = udp_send(local_id,server_machine_id,send_buffer,
-			MSG_HEAD_SIZE*sizeof(int),portnumber);
+
+	UTransfer *transfer = UTransfer::get_instance();
+	transfer->init_tcp(4322);
+	int dist = server_machine_id;
+	int send_buffer_len = sizeof(int)*MSG_HEAD_SIZE;
+	string host_ip = get_host_ip(dist);
+	CSockAddr raddr(host_ip,portnumber);
+	USocket *tcp_sock1;
+	if(transfer->create_socket(tcp_sock1,&raddr,SOCK_TYPE_TCP)==0)
+	{
+		struct timeval wait_tm = {0,100};
+		list<upoll_t>src;
+		list<upoll_t>obj;
+		list<upoll_t>::iterator it;
+		upoll_t pf;
+		
+		pf.events = UPOLL_WRITE_T;
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+		bool wait_creating = true;
+		while(wait_creating){
+			obj.clear();
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it!=obj.end())
+				{
+					if(it->events&UPOLL_ERROR_T){
+					cerr<<"cannot connect to server"<<endl;
+					return -1;
+					}else if(it->events&UPOLL_WRITE_T){
+					cerr<<"connected to server"<<endl;
+					wait_creating = false;
+					}
+				} 
+			}//if
+		}//while wait_creating	
+
+		src.clear();
+		obj.clear();
+		pf.events = UPOLL_WRITE_T;
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+
+		bool bExit = false;
+		struct timeval base_tm = {0,100};
+		while(!bExit)
+		{
+			wait_tm = base_tm;
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it != obj.end())
+				{
+					pf = *it;
+					if(pf.events & UPOLL_ERROR_T)
+					{
+					cerr<<"connection error"<<endl;
+					bExit = true;
+					}else if(pf.events & UPOLL_WRITE_T)
+					{
+			send_size = it->usock->send(send_buffer,send_buffer_len,NULL);
+					if(send_size<=0){
+					bExit = true;
+					cerr<<"connection closed."<<endl;
+					break;
+					}else if(send_size = send_buffer_len)
+					cerr<<"client query job status is done.\n"<<endl;
+					bExit = true;
+					}
+				}
+			}//if(res>0)
+		}//while
+		transfer->destroy_socket(tcp_sock1);
+	}//if
+
+	//int nbytes = udp_send(local_id,server_machine_id,send_buffer,
+	//		MSG_HEAD_SIZE*sizeof(int),portnumber);
+	int nbytes = send_size;
+
 	if(nbytes == MSG_HEAD_SIZE*sizeof(int))
-		fprintf(stderr,"client_query_job stat send %d bytes successfully\n",nbytes);
+	fprintf(stderr,"client_query_job stat send %d bytes successfully\n",nbytes);
 
 	if(job_id > -1){
 	portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;
@@ -243,10 +342,10 @@ int client_query_job_stat(int job_id){
 	return 0;
 }//
 
-int client_query_host_stat(int machine_id){
+int client_query_host_status(int machine_id){
 
 	if(machine_id < 0)
-	return;
+	return -1;
 
   	struct hostent *host = gethostbyname(hosts[machine_id]);
         int remote_fd  = socket(AF_INET,SOCK_DGRAM,0);
@@ -340,19 +439,101 @@ void client_cancel_job(int job_id){
 	int server_machine_id = 1;
 	int dist = server_machine_id;
 	int nbytes;
-	char *sendbuffer = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
-	*(int *)sendbuffer = type;
-	*((int *)sendbuffer+1) = src;
-	*((int *)sendbuffer+2) = dist;
-	*((int *)sendbuffer+3) = job_id;
-	nbytes = udp_send(src,dist,sendbuffer,sizeof(int)*MSG_HEAD_SIZE,portnumber);
-	
+	char *send_buffer_head = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
+	*(int *)send_buffer_head = type;
+	*((int *)send_buffer_head+1) = src;
+	*((int *)send_buffer_head+2) = dist;
+	*((int *)send_buffer_head+3) = job_id;
+	//nbytes = udp_send(src,dist,sendbuffer,sizeof(int)*MSG_HEAD_SIZE,portnumber);
+	char send_buffer[MSG_BUFF_SIZE];
+	memcpy(send_buffer,send_buffer_head,sizeof(int)*MSG_HEAD_SIZE);
+	free(send_buffer_head);
+	UTransfer *transfer = UTransfer::get_instance();
+	transfer->init_tcp(4322);
+	string host_ip = get_host_ip(dist); //(argv[1]);
+	CSockAddr raddr(host_ip,portnumber);
+	USocket *tcp_sock1;
+	if(transfer->create_socket(tcp_sock1,&raddr,SOCK_TYPE_TCP)==0)
+	{
+		struct timeval wait_tm = {0,100};
+		list<upoll_t>src;
+		list<upoll_t>obj;
+		list<upoll_t>::iterator it;
+		upoll_t pf;
+		
+		pf.events = UPOLL_WRITE_T;
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+		bool wait_creating = true;
+		while(wait_creating){
+			obj.clear();
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it!=obj.end())
+				{
+					if(it->events&UPOLL_ERROR_T){
+					cerr<<"cannot connect to server."<<endl;
+						return ;
+					}else if(it->events & UPOLL_WRITE_T)
+					{
+					cerr<<"connected to server."<<endl;
+					wait_creating = false;
+					}
+				}
+			}//ifres
+		}//while wait_creating	
+
+		src.clear();
+		obj.clear();
+		pf.events = UPOLL_WRITE_T;
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+		
+		bool bExit = false;
+		struct timeval base_tm = {0,100};
+		while(!bExit)
+		{
+			wait_tm = base_tm;
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it != obj.end())
+				{
+					pf = *it;
+					if(pf.events & UPOLL_ERROR_T)
+					{
+					cerr<<"connection error."<<endl;
+					bExit = true;
+					}else if(pf.events & UPOLL_WRITE_T)
+					{
+					int send_size = it->usock->send(send_buffer,MSG_BUFF_SIZE,NULL);
+					if(send_size<=0)
+					{
+					bExit = true;
+					cerr<<"connection closed."<<endl;
+					break;
+					}else if(send_size == MSG_BUFF_SIZE)
+					cerr<<"debug send the cancel job msg done."<<endl;	
+					bExit = true;
+					}//else if
+				}//if
+			}//if
+		}//while
+		transfer->destroy_socket(tcp_sock1);
+	}//if
 }
 
 
 void client_single_job_submit(int local_id, int remote_id, char *commstr, int num_req_nodes){
-
+	//todo change the portnumber to 
+	//UDP_JOB_MONITOR_SRV_PORT_NUMBER
 	int portnumber = UDP_JOB_QUE_SRV_PORT_NUMBER;
+	portnumber = UDP_JOB_MONITOR_SRV_PORT_NUMBER;
 	char *username = "ut";//whoami();
 	int username_len = strlen(username)+1;
 
@@ -360,31 +541,107 @@ void client_single_job_submit(int local_id, int remote_id, char *commstr, int nu
 	int src  = local_id;
 	int dist = remote_id;  //ANY remote pc
 	int commpath_len = strlen(commstr)+1;
-	int nbytes;
+	int send_size;
 	int job_msg_len = commpath_len+username_len+MSG_HEAD_SIZE*sizeof(int);
-	char *msgbuffer = (char *)malloc(job_msg_len);
+	char *send_buffer = (char *)malloc(job_msg_len);
 
-	memcpy(msgbuffer, (char *)&type, sizeof(int));
-	memcpy(msgbuffer+1*sizeof(int),(char *)&src,sizeof(int));	
-	memcpy(msgbuffer+2*sizeof(int),(char *)&dist,sizeof(int));
-	memcpy(msgbuffer+3*sizeof(int),(char *)&commpath_len,sizeof(int));
-	memcpy(msgbuffer+4*sizeof(int),(char *)&num_req_nodes,sizeof(int));
-	memcpy(msgbuffer+5*sizeof(int),(char *)&username_len,sizeof(int));
+	memcpy(send_buffer, (char *)&type, sizeof(int));
+	memcpy(send_buffer+1*sizeof(int),(char *)&src,sizeof(int));	
+	memcpy(send_buffer+2*sizeof(int),(char *)&dist,sizeof(int));
+	memcpy(send_buffer+3*sizeof(int),(char *)&commpath_len,sizeof(int));
+	memcpy(send_buffer+4*sizeof(int),(char *)&num_req_nodes,sizeof(int));
+	memcpy(send_buffer+5*sizeof(int),(char *)&username_len,sizeof(int));
 
-	memcpy(msgbuffer+MSG_HEAD_SIZE*sizeof(int),(char *)commstr,commpath_len);
-	memcpy(msgbuffer+MSG_HEAD_SIZE*sizeof(int)+commpath_len,(char *)username,username_len);
+	memcpy(send_buffer+MSG_HEAD_SIZE*sizeof(int),(char *)commstr,commpath_len);
+	memcpy(send_buffer+MSG_HEAD_SIZE*sizeof(int)+commpath_len,(char *)username,username_len);
 
-	//msgbuffer[sizeof(int)*MSG_HEAD_SIZE+commpath_len-1] = '\0';
+	send_buffer[sizeof(int)*MSG_HEAD_SIZE+commpath_len-1] = '\0';
 	fprintf(stderr,"client single job submit port:%d dist:%d pcom:%s user:%s whoamis:%s\n",
 				portnumber,dist,commstr,username,whoami());
-	nbytes = udp_send(src,dist,msgbuffer,job_msg_len,portnumber);
+	UTransfer *transfer = UTransfer::get_instance();
+	transfer->init_tcp(4322);
+	string host_ip = get_host_ip(dist);
+	CSockAddr raddr(host_ip,portnumber);
+	USocket *tcp_sock1;
+if(transfer->create_socket(tcp_sock1, &raddr,SOCK_TYPE_TCP)==0)
+	{
+		struct timeval wait_tm = {0,100};
+		list<upoll_t>src;
+		list<upoll_t>obj;
+		list<upoll_t>::iterator it;
+		upoll_t pf;
+		pf.events = UPOLL_WRITE_T;
 
-	if((nbytes == -1)){
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+		bool wait_creating = true;
+		while(wait_creating){
+			obj.clear();
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it!=obj.end())
+				{
+					if(it->events&UPOLL_ERROR_T){
+					cerr<<"cannot connect to server."<<endl;
+					return;
+					}else if(it->events&UPOLL_WRITE_T)
+					{
+					cerr<<"connected to server."<<endl;
+					wait_creating = false;
+					}
+				}
+			}
+		}//while wait_creating
+		src.clear();
+		obj.clear();
+		pf.events = UPOLL_WRITE_T;
+		pf.pointer = NULL;
+		pf.usock = tcp_sock1;
+		src.push_back(pf);
+		bool bExit = false;
+		struct timeval base_tm = {0,100};
+		while(!bExit)
+		{
+			wait_tm = base_tm;
+			int res = transfer->select(obj,src,&wait_tm);
+			if(res>0)
+			{
+				it = obj.begin();
+				if(it!=obj.end())
+				{
+					pf = *it;
+					if(pf.events & UPOLL_ERROR_T)
+					{
+					cerr<<"connection error."<<endl;
+					bExit = true;
+					}else if(pf.events & UPOLL_WRITE_T)
+					{
+			send_size = it->usock->send(send_buffer,job_msg_len,NULL);
+					if(send_size<=0)
+					{
+					bExit = true;
+					cerr<<"connection closed."<<endl;
+					break;
+					}else if(send_size == job_msg_len)
+					cerr<<"client single job submit is done\n";
+					bExit = true;
+					}//else
+				}//if
+			}//if
+		}//while	
+		transfer->destroy_socket(tcp_sock1);
+	}//if transfer->create
+	//nbytes = udp_send(src,dist,msgbuffer,job_msg_len,portnumber);
+
+	if((send_size == -1)){
 		fprintf(stderr,"client single job sumbit error:%s\n",strerror(errno));
 		exit(1);
 	}//fi
 
-	if (nbytes != job_msg_len){
+	if (send_size != job_msg_len){
 	fprintf(stderr,"client single job submit error: nbytes!=job_msg_len\n");
 	exit(1);
 	}
@@ -394,7 +651,7 @@ void client_single_job_submit(int local_id, int remote_id, char *commstr, int nu
 
 	portnumber = UDP_JOB_QUE_CLI_PORT_NUMBER;
 	char *recvbuffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
-	nbytes = udp_recv(local_id,remote_id,recvbuffer,MSG_HEAD_SIZE*sizeof(int),portnumber);
+	send_size = udp_recv(local_id,remote_id,recvbuffer,MSG_HEAD_SIZE*sizeof(int),portnumber);
 	
 	int new_job_id = *((int *)(recvbuffer)+4);
 
@@ -421,7 +678,9 @@ void epbscli_init()
                 fprintf(stderr,"local machine is not setup in the host list\n");
                 fprintf(stderr,"local_id:%d num_hosts:%d\n",local_id,num_hosts);
                 exit(1);
-        }
+        }//if
+
+	//fprintf(stderr,"debug gethostbyname(hosts):%s local_id:%d\n",hosts[local_id],local_id);
         struct hostent *host = gethostbyname(hosts[local_id]);
         if(host == NULL){
                 fprintf(stderr,"host is not setup in the host list\n");

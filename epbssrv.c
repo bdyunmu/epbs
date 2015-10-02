@@ -27,9 +27,10 @@
 #include "libmsg.h"
 #include "libhost.h"
 #include "libjobq.h"
+#include "utransfer.h"
 
-int  local_id;
-char hostname[64];
+extern int  local_id;
+//char hostname[64];
 int  apt_fd[MAX_NUM_HOSTS];
 int  map_fd[MAX_NUM_HOSTS];
 
@@ -49,8 +50,8 @@ extern int local_machine_stat;
 extern batch_job_info jobq[MAX_JOB_QUEUE];
 extern epbs_host_info hostq[(MAX_NUM_HOSTS+1)];
 
-char *ips[(MAX_NUM_HOSTS+1)];
-char *hosts[(MAX_NUM_HOSTS+1)];  //server   hosts
+extern char *ips[(MAX_NUM_HOSTS+1)];
+extern char *hosts[(MAX_NUM_HOSTS+1)];  //server   hosts
 		  		 //hosts[0] master nodes
 void *client_thread(void *arg)
 {
@@ -122,7 +123,7 @@ void deal_msg_request(){
 	while(1){
 
 	int sin_size=sizeof(struct sockaddr_in);
-        if((srv_fd=accept(srv_listen_fd,(struct sockaddr *)(&client_addr),&sin_size))==-1)
+        if((srv_fd=accept(srv_listen_fd,(struct sockaddr *)(&client_addr),(socklen_t *)&sin_size))==-1)
         {
         fprintf(stderr,"accept error:%s\n\a",strerror(errno));
         exit(1);
@@ -149,7 +150,7 @@ void deal_msg_request(){
 
 
 void *host_status_thread(void *argv){
-	host_status();
+	epbs_host_status();
 }
 
 void *cancel_job_thread(void *argv){
@@ -185,7 +186,8 @@ void *msg_process(void *argv){
 }//void
 
 void *job_monitor_thread(void *argv){
-	job_monitor();
+	//job_monitor();
+	job_monitor_utransfer();
 }//void
 
 int main(int argc, char **argv){
