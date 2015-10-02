@@ -288,10 +288,12 @@ void job_monitor_utransfer(){
         			int dist 	= *((int *)recv_buffer+2);
         			int job_id 	= *((int *)recv_buffer+3);
 
+				char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
+
 				switch(type){
 
 				case MSG_TYPE_JOB_CANCEL:
-
+				{
 				pthread_mutex_lock(&jobq_lock);
 				//batch_job_info *job = &(jobq[job_id]);
 				fprintf(stderr,"(job monitor thread) cancel job job_id:%d\n",job_id);	
@@ -304,12 +306,12 @@ void job_monitor_utransfer(){
 				}//for
 				pthread_mutex_unlock(&jobq_lock);
 				break;
-
+				}
 				//get the job submitted from the client.
 				case MSG_TYPE_JOB_SUBMIT:
-				
+				{	
 				//char *recv_buffer = (char *)malloc(MSG_BUFF_SIZE);
-        			char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
+        			//char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
         			//int portnumber = UDP_JOB_QUE_SRV_PORT_NUMBER;
         			fprintf(stderr,"job queue push (job_monitor_thread).\n");
 
@@ -364,9 +366,10 @@ void job_monitor_utransfer(){
 				break;
 				}
 		//there is no reason why need two switch clause here.				
-				switch(type){
+				//switch(type){
 				
 				case MSG_TYPE_JOB_QUERY:
+				{
 				int type = *((int *)recv_buffer);
 				int src  = *((int *)recv_buffer+1);
 				int dist = *((int *)recv_buffer+2);
@@ -384,7 +387,7 @@ void job_monitor_utransfer(){
 					}//if
 				}//for
 				pthread_mutex_unlock(&jobq_lock);
-				char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
+				//char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
 				*((int *)send_buffer) = type;
 				*((int *)send_buffer+1) = local_id;
 				*((int *)send_buffer+2) = src;
@@ -442,6 +445,7 @@ void job_monitor_utransfer(){
 		sizeof(int)*MSG_HEAD_SIZE+sizeof(batch_job_info)*MAX_JOB_QUEUE,portnumber);
 				}//job_id == -2
 				break;
+				}//case msg_type_job_query
 				}//switch(type)
 				}
 				}
