@@ -1,7 +1,7 @@
 
 //host component for easy pbs v0.2
-//www.hbyunlin.com.cn
-//7/31/3024
+//www.bdyunmu.com
+//9/30/2015
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,22 +9,30 @@
 #include <string.h>
 #include <netdb.h>
 #include <sys/types.h>
-#include <netinet/in.h> 
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
+#include <iostream>
+
+#include <list>
+#include <signal.h>
 
 #include "libmsg.h"
 #include "libhost.h"
 #include "libjobq.h"
+#include "utransfer.h"
+#include "PPTimers.h"
+
+using namespace std;
 
 extern int local_id;
 int sockfd[MAX_NUM_HOSTS];
-int map_fd[MAX_NUM_HOSTS];
-char hostname[64];
-int num_hosts;
+//int map_fd[MAX_NUM_HOSTS];
+//char hostname[64];
+extern int num_hosts;
 int portnumber;
 
 extern char *ips[MAX_NUM_HOSTS];
@@ -40,12 +48,175 @@ void msg_configure(){
 	host_configure(hostfile);
 }//void
 
+
+int tcp_send1(char *r_ip, int port, char *buffer_, int len_, int portnumber_){
+
+	map<USocket*, upoll_t> m_tcp_map;	
+	CPPTimers timers(4);
+	timers.setTimer(0,3000);
+	timers.trigger(0);
+	int totl_size = 0;
+	char data[4096];
+	UTransfer *transfer = UTransfer::get_instance();
+	transfer->init_tcp(port);
+	transfer->init_udp(port+1);
+	list<upoll_t> src;
+	list<upoll_t> dst;
+	list<upoll_t>::iterator it;
+	USocket *tcp_listener = transfer->get_tcp_listener();
+	upoll_t ls_poll;
+	ls_poll.events = UPOLL_READ_T;
+	ls_poll.pointer = NULL;
+	ls_poll.usock = tcp_listener;
+	src.push_back(ls_poll);
+	struct timeval base_tm = {0, 100};
+	struct timeval wait_tm;
+	signal(SIGPIPE, SIG_IGN);
+	while(true)
+	{	
+		dst.clear();
+		src.clear();
+		map<USocket*, upoll_t>::iterator mit;
+		for(mit = m_tcp_map.begin();mit!=m_tcp_map.end();mit++)
+			src.push_back(mit->second);
+		src.push_back(ls_poll);
+		wait_tm = base_tm;
+		int res = transfer->select(dst, src, &wait_tm);
+		if(res>0)
+		{
+			for(it=dst.begin();it!=dst.end();it++)
+			{
+			upoll_t up = *it;
+			if(up.usock == tcp_listener)
+			{
+			if(up.events & UPOLL_READ_T)
+			{
+			USocket *sc = transfer->accept(tcp_listener);
+			if(sc)
+			{
+			upoll_t new_up;
+			//FILE *fp = fopen(
+			new_up.pointer = NULL;
+			new_up.usock = sc;
+			new_up.events = UPOLL_WRITE_T;
+			m_tcp_map[sc] = new_up;
+			}//if
+			}
+			//TODO			
+			}//if
+			}//for
+
+		}//if
+	}//while
+}
+
+
+int tcp_send(char *srv_ip, int dist_, char *buffer_, int len_, int portnumber_){
+	struct timeval wait_tm = {0, 0};	
+	UTransfer *transfer = UTransfer::get_instance();
+	transfer->init_tcp(4322);
+	string host(srv_ip);
+	int port_number = 0;
+	char data[1024];
+	CSockAddr raddr(host,portnumber_);
+	USocket* tcp_sock1;
+
+if(transfer->create_socket(tcp_sock1,&raddr,SOCK_TYPE_TCP) == 0){
+
+	const char *fname = "tmp.result";
+	
+	list<upoll_t> src;
+	list<upoll_t> obj;
+	list<upoll_t>::iterator it;
+	upoll_t pf;
+		
+	pf.events = UPOLL_WRITE_T;
+	pf.pointer = NULL;
+	pf.usock = tcp_sock1;
+	src.push_back(pf);
+
+	bool wait_creating = true;
+	while(wait_creating)
+	{
+		obj.clear();
+		int res = transfer->select(obj,src,&wait_tm);
+	if(res>0)
+	{
+		it = obj.begin();
+		if(it != obj.end())
+		{
+		if(it->events & UPOLL_ERROR_T)
+		{
+		cerr<<"can not connect to server"<<endl;
+		return 0;
+		}else if(it->events & UPOLL_WRITE_T)
+		{
+
+		cerr<<"connected to server."<<endl;
+		wait_creating = false;
+	
+		}//else
+
+		}//if
+	}
+
+	}//while
+
+	src.clear();
+	obj.clear();
+	pf.events = UPOLL_READ_T;
+	pf.pointer = NULL;	
+	pf.usock = tcp_sock1;
+	src.push_back(pf);
+	
+	bool bExit = false;
+	struct timeval base_tm = {0, 100};
+
+	while(!bExit){
+	wait_tm = base_tm;
+	int res = transfer->select(obj, src,&wait_tm);
+	if(res>0)
+	{
+		it = obj.begin();
+		if(it != obj.end())
+		{
+			pf = *it;
+			if(pf.events & UPOLL_ERROR_T)
+			{
+			//cerr<<"connection error."<<endl;
+			printf("connection error\n");
+			bExit = true;
+			}else if(pf.events & UPOLL_READ_T)
+			{
+			int remain_size = sizeof(data);
+			int len = it->usock->recv(data,remain_size,NULL);
+			if(len<=0)
+			{
+			bExit = true;
+			break;
+			}else
+			{
+			int filelen;
+			//filelen += len;
+			}//else
+			}
+		}
+	}//if(res>0)
+
+	}//while bExit
+
+
+	}//if creat_socket1
+
+
+}//int
+
 int udp_recv(int src_, int dist_, char *buffer_, int len_, int portnumber_){
 
 	int i;
         struct sockaddr_in server_addr;
         struct sockaddr_in client_addr;
-        int sin_size = 0;
+        socklen_t sin_size = 0;
         int portnumber = portnumber_;
 	char *udp_recv_buffer = buffer_;
 	int udp_recv_buffer_len = len_;
@@ -72,10 +243,10 @@ int udp_recv(int src_, int dist_, char *buffer_, int len_, int portnumber_){
 
         //char buffer[MSG_BUFF_SIZE];
 	char *buffer = (char *)malloc(udp_recv_buffer_len);
-
+	//int rbytes;
 	int rbytes = recvfrom(recv_fd, (char *)buffer,
-		udp_recv_buffer_len, 0, (struct sockaddr_in *)&client_addr,&sin_size);
-
+		udp_recv_buffer_len, 0, (sockaddr *)&client_addr,&sin_size);
+	//todo
 	if(rbytes <=0 || rbytes > udp_recv_buffer_len){
 		fprintf(stderr,"error udp_recv rbytes <=0 || rbytes>udp_recv_buffer_len\n");
 		fprintf(stderr,"rbytes:%d udp_recv_buffer_len:%d\n",rbytes,udp_recv_buffer_len);
@@ -120,8 +291,8 @@ int udp_send(int src_, int dist_, char *buffer_, int len_, int portnumber_){
                 exit(1);
         }//fi
         else if (nbytes == udp_send_len)
-        	fprintf(stderr,"udp send %d bytes port:%d host:%s port:%d\n",
-			nbytes, portnumber, ips[dist_], portnumber_);
+        	fprintf(stderr,"udp send %d bytes host:%s port:%d\n",
+			nbytes, ips[dist_], portnumber_);
 	close(remote_fd);
 	return nbytes;
 }//int
@@ -239,11 +410,7 @@ void msg_check_configure(){
 void msg_init()
 {
 	fprintf(stderr, "msg init\n");
-	
 	msg_configure();
-
 	fprintf(stderr, "msg configure\n");
-
 	msg_check_configure();
-
 }//void

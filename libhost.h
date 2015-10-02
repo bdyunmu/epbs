@@ -11,8 +11,15 @@
 
 #define NUM_HOSTS 2
 #define MAX_NUM_HOSTS (2*NUM_HOSTS+1)
+void *host_srv_process(void *);
 
-void host_configure();
+void hostq_init();
+void epbs_host_status();
+extern "C"{
+void host_configure(char *hostfile);
+}
+void host_query();
+char *get_host_ip(int dist_id);
 
 typedef struct epbs_host_infor_{
 	int host_id;

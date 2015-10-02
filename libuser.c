@@ -46,7 +46,8 @@ int who()
 char* whoami(){
 
 	FILE *fd = popen("who -m|awk '{print $1}'","r");
-	char *buff = (char *)malloc(64);
+	char *buff = new char[64];
+	//todo	
 	int bytes = fread(buff,64,1,fd);
 	int i = 0;
 	while(i<64){

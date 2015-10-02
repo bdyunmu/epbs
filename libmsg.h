@@ -51,8 +51,8 @@
 #define MSG_TYPE_DATA 1
 #define MSG_TYPE_JOB_RUN 2
 #define MSG_TYPE_HOST 3
-
 #define MSG_TYPE_JOB_SUBMIT 4
+
 #define MSG_TYPE_JOB_CANCEL 5
 #define MSG_TYPE_JOB_RETURN 6
 #define MSG_TYPE_JOB_QUERY 7
@@ -65,10 +65,16 @@ void msg_get_local_id();
 //int msg_send(int src, int dist, char *buffer, int len, int msg_id);
 //int msg_recv(int src, int dist, char *buffer, int len, int msg_id);
 
+void *msg_srv_process(void *);
+
 int msg_send(int src, int dist, char *buffer, int len);
 int msg_recv(int src, int dist, char *buffer, int len);
+extern "C"{ 
 
 int udp_recv(int src_, int dist_, char *buffer_, int len_, int portnumber_);
 int udp_send(int src_, int dist_, char *buffer_, int len_, int portnumber_);
+int tcp_send(int src_, int dist_, char *buffer_, int len_, int msg_type_);
+int tcp_recv(int src_, int dist_, char *buffer_, int len_, int msg_type_);
 
+}
 #endif

@@ -1,7 +1,7 @@
 
 //host component for easy pbs v0.2
-//www.hbyunlin.com.cn
-//7/31/3024
+//www.bdyunmu.com
+//9/16/2015
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,10 +39,15 @@ epbs_host_info hostq[(MAX_NUM_HOSTS+1)];
 pthread_mutex_t hostq_lock;
 int local_machine_stat;
 
-void host_stat(){
+char *get_host_ip(int dist_id){
+	if(dist_id>MAX_NUM_HOSTS || dist_id<=0) return NULL;
+	else
+	return ips[dist_id];
+}//char
+void epbs_host_status(){
 	
 	int portnumber = UDP_HOST_STAT_SRV_PORT_NUMBER;	
-	fprintf(stderr,"host_stat thread portnumber:%d\n",portnumber);
+	fprintf(stderr,"host_status thread portnumber:%d\n",portnumber);
 	int i;
 	struct sockaddr_in server_addr;
 	struct sockaddr_in client_addr;
@@ -61,10 +66,10 @@ void host_stat(){
 	int src   = *((int *)recv_buffer+1);
 	int dist  = *((int *)recv_buffer+2);
 	int host_id = *((int *)recv_buffer+3);
-	int host_stat = *((int *)recv_buffer+4);
+	int host_status = *((int *)recv_buffer+4);
 
 	pthread_mutex_lock(&hostq_lock);
-	hostq[host_id].host_stat = host_stat;
+	hostq[host_id].host_stat = host_status;
 	pthread_mutex_unlock(&hostq_lock);
 
 	}//if nbytes >0	
@@ -169,7 +174,7 @@ void hostq_init(){
 	hostq[i].host_id = i;
 	hostq[i].host_stat = HOST_STAT_ONLINE;
 	strncpy(hostq[i].ip,ips[i],strlen(ips[i]));
-
+	//memncpy(hostq[i].ip,ips[i],strlen(ips[i]));
 	}//for
 
 }//void
@@ -210,7 +215,9 @@ void host_configure(char *hostpath){
         break;
 
         memcpy(hosts[i],p1,p2-p1);
+	hosts[i][p2-p1] = '\0';
 	memcpy(ips[i],p1,p2-p1);
+	ips[i][p2-p1] = '\0';
         nbytes -= ((p2-p1)+13);
 
         p = p2+7;
@@ -234,10 +241,11 @@ void host_configure(char *hostpath){
         host = gethostbyname(hostname);
         sin_addr=((struct in_addr *)host->h_addr);
         ip = inet_ntoa(*sin_addr);
-
+	//fprintf(stderr,"hostname:%s num_hosts:%d ip:%s hosts[1]:%s\n",hostname,num_hosts,ip,hosts[1]);
 	local_id == -1;
         for(i=1;i<=num_hosts;i++){
-              	if(memcmp(ip,(char *)(hosts[i]),13)==0)
+		int ip_str_len = strlen(ip);
+              	if(memcmp(ip,(char *)(hosts[i]),ip_str_len)==0)
 		{
 		local_id = i;
 		fprintf(stderr,"local ip:%s ips[i]:%s hosts[i]:%s local_id:%d\n",
