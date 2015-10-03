@@ -26,6 +26,10 @@ typedef struct batch_job_info_	{
 
 void *job_srv_process(void *);
 
+void client_submit_single_job(int local_id, int remote_id, char *commstr, int num_req_nodes);
+void client_submit_job_done();
+void client_cancel_job(int );
+
 int client_query_job_status(int job_id);
 int *client_query_all_job_stat();
 int client_query_host_status(int machine_id);

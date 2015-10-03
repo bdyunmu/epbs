@@ -18,7 +18,7 @@ void epbs_host_status();
 extern "C"{
 void host_configure(char *hostfile);
 }
-void host_query();
+//void host_query();
 char *get_host_ip(int dist_id);
 
 typedef struct epbs_host_infor_{
@@ -33,5 +33,5 @@ typedef struct epbs_host_infor_{
 
 extern int num_hosts;
 extern int local_id;
-
+extern int pcstat[(MAX_NUM_HOSTS)];
 #endif

@@ -28,6 +28,7 @@
 #include "libhost.h"
 #include "libjobq.h"
 #include "utransfer.h"
+#include "host_monitor.h"
 
 extern int  local_id;
 //char hostname[64];
@@ -158,7 +159,8 @@ void *cancel_job_thread(void *argv){
 }//void
 
 void *host_query_thread(void *argv){
-	host_query();
+	//host_query();
+	host_monitor_transfer_0();
 }//void
 
 void *interactive_job_thread(void *argv){

@@ -62,6 +62,8 @@ void job_configure(){
 	fprintf(stderr,"job_configure\n");	
 }//void
 
+
+//help function that invoke the local commands
 void deal_interactive_job_request(){
 	
         int i;
@@ -145,6 +147,7 @@ void deal_interactive_job_request(){
 
 }
 
+//help function that cancel the job thread.
 void cancel_job_request(){
 
 	fprintf(stderr,"cancel job request portnumber:%d\n",
@@ -170,7 +173,7 @@ void cancel_job_request(){
 	while(1){
 
         sin_size=sizeof(struct sockaddr_in);
-	fprintf(stderr,"debug udp cancel_job srv request before while!\n");
+	//fprintf(stderr,"debug udp cancel_job srv request before while!\n");
         int nbytes = udp_recv(local_id,0,recv_buffer,
                         MSG_BUFF_SIZE,UDP_CANCEL_JOB_SRV_PORT_NUMBER);
 
@@ -211,15 +214,22 @@ void cancel_job_request(){
 
 }//void
 
+
+
+ 	//job_stat_query
+ 	//job_submit
+ 	//job_cancel
+
 void job_monitor_utransfer(){
+	
 	//merge the service for UDP_JOB_QUE_SRV_PORT_NUMBER
 	int portnumber = UDP_JOB_MONITOR_SRV_PORT_NUMBER;
 	CPPTimers timers(4);
 	timers.setTimer(0,3000);
 	timers.trigger(0);
-
+	
 	char recv_buffer[MSG_BUFF_SIZE];
-
+	//char send_buffer[MSG_BUFF_SIZE];	
 	UTransfer *transfer = UTransfer::get_instance();
 	transfer->init_tcp(portnumber);
 	list<upoll_t> src;
@@ -246,6 +256,8 @@ void job_monitor_utransfer(){
 		
 		wait_tm = base_tm;
 		int res = transfer->select(dst,src,&wait_tm);
+		int recv_size = 0;
+		int send_size = 0;
 		if(res>0)
 		{
 			for(it = dst.begin();it!=dst.end();it++)
@@ -265,12 +277,20 @@ void job_monitor_utransfer(){
 						m_tcp_map[sc] = new_up;
 						}
 					}
+				}else if(up.events & UPOLL_WRITE_T){
+				send_size = it->usock->send((char *)(it->pointer),MSG_BUFF_SIZE,NULL);
+				free(it->pointer);
+				it->pointer = NULL;
+				transfer->destroy_socket(it->usock);
+				m_tcp_map.erase(it->usock);
+				cerr<<"send job status done."<<endl;
 				}
 				else if(up.events & UPOLL_READ_T)
 				{
-		int recv_size = it->usock->recv(recv_buffer,MSG_BUFF_SIZE,NULL);
+
+				recv_size = it->usock->recv(recv_buffer,MSG_BUFF_SIZE,NULL);
 				if(recv_size>MSG_BUFF_SIZE){
-					cerr<<"FINISHED:connection closed."<<endl;
+					cerr<<"SEND ERROR."<<endl;
 					transfer->destroy_socket(it->usock);
 					m_tcp_map.erase(it->usock);	
 				}else if(recv_size<0 &&it->usock->get_reason() != EAGAIN){
@@ -286,17 +306,25 @@ void job_monitor_utransfer(){
 				int type 	= *((int *)recv_buffer);
         			int src  	= *((int *)recv_buffer+1);
         			int dist 	= *((int *)recv_buffer+2);
-        			int job_id 	= *((int *)recv_buffer+3);
-
-				char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
-
+        			//int job_id 	= *((int *)recv_buffer+3);
+        			char *send_buffer = (char *)malloc(sizeof(char)*MSG_BUFF_SIZE);
+				#if 1	
+				upoll_t write_up;
+                                //cur_up = m_tcp_map[it->usock];
+                                write_up.usock = up.usock;
+                                write_up.events = UPOLL_WRITE_T;
+                                write_up.pointer = (void *)send_buffer;
+                                m_tcp_map[it->usock] = write_up;
+				#endif
 				switch(type){
 
 				case MSG_TYPE_JOB_CANCEL:
 				{
+
+				int job_id 	= *((int *)recv_buffer+3);
 				pthread_mutex_lock(&jobq_lock);
 				//batch_job_info *job = &(jobq[job_id]);
-				fprintf(stderr,"(job monitor thread) cancel job job_id:%d\n",job_id);	
+				fprintf(stderr,"(job monitor thread) (cancel job) job_id:%d\n",job_id);	
 				for(int node_id = 1;node_id<=NUM_HOSTS;node_id++){
 				fprintf(stderr,"#i:%d job_id:%d nodesstat:%d\n",
 							node_id,job_id,nodesstat[node_id]);
@@ -307,13 +335,11 @@ void job_monitor_utransfer(){
 				pthread_mutex_unlock(&jobq_lock);
 				break;
 				}
-				//get the job submitted from the client.
+
 				case MSG_TYPE_JOB_SUBMIT:
 				{	
-				//char *recv_buffer = (char *)malloc(MSG_BUFF_SIZE);
-        			//char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
         			//int portnumber = UDP_JOB_QUE_SRV_PORT_NUMBER;
-        			fprintf(stderr,"job queue push (job_monitor_thread).\n");
+        			fprintf(stderr,"(job_monitor_thread) (job submit) src:%d.\n",src);
 
         			pthread_mutex_lock(&jobq_lock);
         			//the job queue is full
@@ -323,21 +349,18 @@ void job_monitor_utransfer(){
                                 }//if
 				//todo if job queue is full then return the failed submit information.
                                 pthread_mutex_unlock(&jobq_lock);
-                                //portnumber = UDP_JOB_QUE_SRV_PORT_NUMBER;
-                                //nbytes = udp_recv(local_id,0,recv_buffer,MSG_BUFF_SIZE,portnumber);
 
-                		int type = *((int *)recv_buffer);
-                		int src  = *((int *)recv_buffer+1);
-                		int dist = *((int *)recv_buffer+2);
+                		//int type = *((int *)recv_buffer);
+                		//int src  = *((int *)recv_buffer+1);
+                		//int dist = *((int *)recv_buffer+2);
                 		int comm_str_len  = *((int *)recv_buffer+3);
                 		int num_req_nodes = *((int *)recv_buffer+4);
                 		int username_len  = *((int *)recv_buffer+5);
-
                 		char *comm_str = (char *)((int *)recv_buffer+MSG_HEAD_SIZE);
                 		char *username = (char *)((int *)recv_buffer+MSG_HEAD_SIZE )+comm_str_len;
 				//todo
-				fprintf(stderr,"job queue push (job monitor thread) read %d bytes command:%s n_nodes:%d user:%s\n",
-                                recv_size, comm_str, num_req_nodes, username);
+				fprintf(stderr,"(job monitor thread) (job submit) src:%d command:%s req_nodes:%d user:%s\n",
+                                src, comm_str, num_req_nodes, username);
                 		//push job into queue;
                                 pthread_mutex_lock(&jobq_lock);
                                 batch_job_info  *job = &(jobq[job_head]);
@@ -351,28 +374,26 @@ void job_monitor_utransfer(){
                 		job->time1 = time(NULL);
                 		job->job_stat = JOB_STAT_INQUEUE;
 				
-				int new_job_id_ = job_head;
-                		job->job_id = new_job_id_;
+				int new_job_id_0 = job_head;
+                		job->job_id = new_job_id_0;
                 		job_head = (job_head+1)%MAX_JOB_QUEUE;
                 		pthread_mutex_unlock(&jobq_lock);
 
-				portnumber = UDP_JOB_QUE_CLI_PORT_NUMBER;
+				//portnumber = UDP_JOB_QUE_CLI_PORT_NUMBER;
                 		*((int *)send_buffer) = MSG_TYPE_JOB_SUBMIT;
                 		*((int *)send_buffer+1) = local_id;
                 		*((int *)send_buffer+2) = src;
-                		*((int *)send_buffer+4) = new_job_id_;
-	fprintf(stderr,"job queue push done. new job:%d job_h:%d job_t:%d\n",new_job_id_,job_head,job_tail);
-                		udp_send(local_id,src,send_buffer,MSG_HEAD_SIZE*sizeof(int),portnumber);	
+                		*((int *)send_buffer+4) = new_job_id_0;
+				//fprintf(stderr,"job queue push done. new job:%d job_h:%d job_t:%d\n",new_job_id_,job_head,job_tail);
+                		//udp_send(local_id,src,send_buffer,MSG_HEAD_SIZE*sizeof(int),portnumber);	
 				break;
 				}
-		//there is no reason why need two switch clause here.				
-				//switch(type){
 				
 				case MSG_TYPE_JOB_QUERY:
 				{
-				int type = *((int *)recv_buffer);
-				int src  = *((int *)recv_buffer+1);
-				int dist = *((int *)recv_buffer+2);
+				//int type = *((int *)recv_buffer);
+				//int src  = *((int *)recv_buffer+1);
+				//int dist = *((int *)recv_buffer+2);
 				int job_id = *((int *)recv_buffer+3);	
 				batch_job_info *job = NULL;
 				int cur_job_stat = JOB_STAT_UNKNOW;
@@ -387,15 +408,14 @@ void job_monitor_utransfer(){
 					}//if
 				}//for
 				pthread_mutex_unlock(&jobq_lock);
-				//char *send_buffer = (char *)malloc(MSG_HEAD_SIZE*sizeof(int));
 				*((int *)send_buffer) = type;
 				*((int *)send_buffer+1) = local_id;
 				*((int *)send_buffer+2) = src;
 				*((int *)send_buffer+3) = job_id;
 				*((int *)send_buffer+4) = cur_job_stat;
-				portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;
-				nbytes = udp_send(local_id,src,send_buffer,
-					sizeof(int)*MSG_HEAD_SIZE,portnumber);
+				//portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;
+				//nbytes = udp_send(local_id,src,send_buffer,
+				//	sizeof(int)*MSG_HEAD_SIZE,portnumber);
 				}//if
 
 				if(job_id == -1){
@@ -406,30 +426,30 @@ void job_monitor_utransfer(){
 					jobstat[i] = job->job_stat;
 				}//for
 				pthread_mutex_unlock(&jobq_lock);
-				char *send_buffer2 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)
-								+MAX_JOB_QUEUE*sizeof(int));
-				*((int *)send_buffer2)= type;
-				*((int *)send_buffer2+1) = local_id;
-				*((int *)send_buffer2+2) = src;
-				*((int *)send_buffer2+3) = job_id;
-				*((int *)send_buffer2+4) = 0;
+				//char *send_buffer2 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)
+				//				+MAX_JOB_QUEUE*sizeof(int));
+				*((int *)send_buffer)	= type;
+				*((int *)send_buffer+1) = local_id;
+				*((int *)send_buffer+2) = src;
+				*((int *)send_buffer+3) = job_id;
+				*((int *)send_buffer+4) = 0;
 				for(int i = 0;i<MAX_JOB_QUEUE;i++){
-					*((int *)send_buffer2+MSG_HEAD_SIZE+i)=jobstat[i];
+					*((int *)send_buffer+MSG_HEAD_SIZE+i)=jobstat[i];
 				}//for
-				portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;
-				nbytes = udp_send(local_id,src,send_buffer2,
-					sizeof(int)*MSG_HEAD_SIZE+sizeof(int)*MAX_JOB_QUEUE,portnumber);
+				//portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;
+				//nbytes = udp_send(local_id,src,send_buffer2,
+				//	sizeof(int)*MSG_HEAD_SIZE+sizeof(int)*MAX_JOB_QUEUE,portnumber);
 				}//if(job_id == -1)
 				if(job_id == -2){
 					batch_job_info jobi[MAX_JOB_QUEUE];
 					batch_job_info *pjob;
-					char *send_buffer3 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)+
-					MAX_JOB_QUEUE*sizeof(batch_job_info));
+					//char *send_buffer3 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)+
+					//				MAX_JOB_QUEUE*sizeof(batch_job_info));
 					pthread_mutex_lock(&jobq_lock);
 					for(int i = 0;i<MAX_JOB_QUEUE;i++){
 						pjob = &(jobq[i]);
-					batch_job_info *ptmp = (batch_job_info *)(send_buffer3+
-					sizeof(int)*MSG_HEAD_SIZE+i*sizeof(batch_job_info));
+					batch_job_info *ptmp = (batch_job_info *)(send_buffer+
+						sizeof(int)*MSG_HEAD_SIZE+i*sizeof(batch_job_info));
 					struct tm *tmt;
 					time_t t = time(NULL);
 					tmt = localtime(&t);
@@ -440,13 +460,14 @@ void job_monitor_utransfer(){
 			pjob->username,ptmp->username);
 					}
 					pthread_mutex_unlock(&jobq_lock);
-					portnumber=UDP_JOB_STAT_CLI_PORT_NUMBER;
-					nbytes = udp_send(local_id, src,send_buffer3,
-		sizeof(int)*MSG_HEAD_SIZE+sizeof(batch_job_info)*MAX_JOB_QUEUE,portnumber);
+					//portnumber=UDP_JOB_STAT_CLI_PORT_NUMBER;
+					//nbytes = udp_send(local_id, src,send_buffer3,
+					//	sizeof(int)*MSG_HEAD_SIZE+sizeof(batch_job_info)*MAX_JOB_QUEUE,portnumber);
 				}//job_id == -2
 				break;
 				}//case msg_type_job_query
 				}//switch(type)
+
 				}
 				}
 			}//for
@@ -468,11 +489,9 @@ void job_monitor(){
 	int i;
 	int isavailable;
 	int server_machine_id = 1;
-
 	int nbytes;
 	nbytes = udp_recv(local_id,server_machine_id,recv_buffer,
 						MSG_BUFF_SIZE,portnumber);
-
 	int type = *((int *)recv_buffer);
 	int src  = *((int *)recv_buffer+1);
 	int dist = *((int *)recv_buffer+2);
@@ -481,17 +500,14 @@ void job_monitor(){
 	switch(type){
 
 	case MSG_TYPE_JOB_CANCEL:
-
 	pthread_mutex_lock(&jobq_lock);
 	batch_job_info *job = &(jobq[job_id]);
-	
         int type = *((int *)recv_buffer);
         int src  = *((int *)recv_buffer+1);
         int dist = *((int *)recv_buffer+2);
         int job_id = *((int *)recv_buffer+3);
 
 	fprintf(stderr,"job monitor act:cancel src:%d dist:%d job_id:%d\n",src,dist,job_id);
-
         int i;
         int host_id = 0;
         for(i=1;i<=NUM_HOSTS;i++){
@@ -500,18 +516,13 @@ void job_monitor(){
                 server_single_job_cancel(job_id,i);
                 }//server_single_job_cancel
         }//for
-
 	pthread_mutex_unlock(&jobq_lock);
-
 	break;
 	
 	//case MSG_TYPE_JOB_SUBMIT:
-
 	//break;	
 	//default:
-	
 	}//switch	
-
 	}//while
 }//
 
@@ -525,12 +536,10 @@ void job_status_query(){
 
 	while(1){
 	portnumber = UDP_JOB_STAT_SRV_PORT_NUMBER;
-	
 	int num_req_nodes = 0;
 	int i;
 	int isavailable;
 	int server_machine_id = 1;
-	
 	int nbytes; 
 	nbytes = udp_recv(local_id,server_machine_id,recv_buffer,sizeof(int)*MSG_HEAD_SIZE,portnumber);
 	int type = *((int *)recv_buffer);
@@ -539,10 +548,8 @@ void job_status_query(){
 	int job_id = *((int *)recv_buffer+3);
 
 	fprintf(stderr,"job stat query type:%d src:%d dist:%d job_id:%d\n",type,src,dist,job_id);
-	
 	batch_job_info *job = NULL;
 	int cur_job_stat = JOB_STAT_UNKNOW;
-
 	if(job_id >= 0){
 	pthread_mutex_lock(&jobq_lock);
 	for(i=0;i<MAX_JOB_QUEUE;i++){
@@ -561,7 +568,6 @@ void job_status_query(){
 	portnumber = UDP_JOB_STAT_CLI_PORT_NUMBER;	
 	nbytes = udp_send(local_id,src,send_buffer,sizeof(int)*MSG_HEAD_SIZE,portnumber);
 	//fprintf(stderr,"job stat query udp_send %d bytes\n",nbytes);
-	
 	}//if	
 
 	if(job_id == -1){
@@ -589,7 +595,6 @@ void job_status_query(){
 	}//if job_id == -1
 
 	if(job_id == -2){
-
 	batch_job_info jobi[MAX_JOB_QUEUE];
 	batch_job_info *pjob;
 	char *send_buffer3 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)+
@@ -598,7 +603,6 @@ void job_status_query(){
 	for(i=0;i<MAX_JOB_QUEUE;i++){
 		pjob = &(jobq[i]);
 	batch_job_info * ptmp = (batch_job_info *)(send_buffer3 + sizeof(int)*MSG_HEAD_SIZE+i*sizeof(batch_job_info)); 	
-	
 	struct tm *tmt;
 	time_t t = time(NULL);
 	tmt = localtime(&t);
@@ -619,6 +623,7 @@ void job_status_query(){
 
 }//void
 
+//help function that retrieve local values
 void job_queue_result(){
 
 	int portnumber = UDP_JOB_RELT_SRV_PORT_NUMBER;
@@ -763,6 +768,8 @@ int server_query_host_stat(int machine_id){
 	return 0;
 }//void
 
+
+//help function that invoke local commands
 void server_single_job_submit(int local_id, int remote_id, char *command, int job_id){
 
         int portnumber = UDP_INTER_JOB_SRV_PORT_NUMBER;
@@ -800,6 +807,8 @@ void server_single_job_submit(int local_id, int remote_id, char *command, int jo
 	}//if
 }//void
 
+
+//help function that invoke local commands to cancel job
 void server_single_job_cancel(int job_id_, int host_id_){
 	
 	fprintf(stderr,"server_single_job_cancel job_id:%d host_id:%d\n",job_id_,host_id_);
@@ -858,12 +867,9 @@ void job_queue_push(){
                 int pcomm_len = *((int *)recv_buffer+3);
                 int num_req_nodes = *((int *)recv_buffer+4);
 		int username_len = *((int *)recv_buffer+5);
-		
                 char *pcomm = (char *)((int *)recv_buffer+MSG_HEAD_SIZE);
        		char *username = (char *)((int *)recv_buffer+MSG_HEAD_SIZE )+pcomm_len;
-       
 	 	//pcomm[payload_len] = '\0';
-
 		fprintf(stderr,"job queue push thread read %d bytes pcommand:%s n_nodes:%d user:%s\n",
                                 nbytes, pcomm, num_req_nodes, username);
 		//put job into queue;
@@ -873,10 +879,8 @@ void job_queue_push(){
 		fprintf(stderr,"error job queue push job == NULL\n");
 		exit(1);
 		}//if
-
 		sprintf((char *)(job->pcomm),pcomm,pcomm_len);
 		sprintf((char *)(job->username),username,username_len);
-
 		job->num_req_nodes = num_req_nodes;
 		job->time1 = time(NULL);
 		job->job_stat = JOB_STAT_INQUEUE;
