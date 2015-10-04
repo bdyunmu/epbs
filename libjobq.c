@@ -1,7 +1,9 @@
-
-//host component for easy pbs v0.2
-//www.bdyunmu.com
-//9/16/2015	lihui@indiana.edu
+/*
+host component for easy pbs v0.2
+copytright belongs to www.bdyunmu.com
+author:lihui@indiana.edu
+last update:9/16/2015
+*/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -38,6 +40,7 @@ pthread_t job_thread_id;
 pthread_mutex_t jobq_lock;
 extern char *hosts[MAX_JOB_QUEUE];
 extern int pcstat[MAX_NUM_HOSTS];
+extern int num_hosts;
 
 void * execl_thread(void *argv){
 
@@ -54,7 +57,7 @@ void * execl_thread(void *argv){
 	if(pid == 0){
 	execl(pcomm,emptyargv);	
 	}else{
-	printf("execl_thread is done.\n");
+	printf("execl_thread is finished.\n");
 	}
 }       //void
 
@@ -186,13 +189,13 @@ void cancel_job_request(){
                 int job_id = *((int *)recv_buffer+3);
 
 	fprintf(stderr,"debug cancel job before pthread_cancel\n");
-	int res = pthread_cancel(job_thread_id);
+	int result = pthread_cancel(job_thread_id);
 
 	//if (res == PTHREAD_CANCELED)
         //      fprintf(stderr, "debug cancel_job job:%d was canceled\n",job_id);
 
-	fprintf(stderr,"cancel job request done for job_id:%d res:%d\n",
-						job_id, res);
+	fprintf(stderr,"cancel job request jid(%d) pthread_cancel result:%d\n",
+						job_id, result);
 
 #if 0
                 //query number of free nodes
@@ -325,8 +328,8 @@ void job_monitor_utransfer(){
 				pthread_mutex_lock(&jobq_lock);
 				//batch_job_info *job = &(jobq[job_id]);
 				fprintf(stderr,"(job monitor thread) (cancel job) job_id:%d\n",job_id);	
-				for(int node_id = 1;node_id<=NUM_HOSTS;node_id++){
-				fprintf(stderr,"#i:%d job_id:%d nodesstat:%d\n",
+				for(int node_id = 1;node_id<=num_hosts;node_id++){
+			fprintf(stderr,"node[%d] job_id[%d] node assigned job nodesstat(%d)\n",
 							node_id,job_id,nodesstat[node_id]);
 					if(nodesstat[node_id] == job_id){
 					server_single_job_cancel(job_id,node_id);
@@ -441,7 +444,7 @@ void job_monitor_utransfer(){
 				//	sizeof(int)*MSG_HEAD_SIZE+sizeof(int)*MAX_JOB_QUEUE,portnumber);
 				}//if(job_id == -1)
 				if(job_id == -2){
-					batch_job_info jobi[MAX_JOB_QUEUE];
+					//batch_job_info jobi[MAX_JOB_QUEUE];
 					batch_job_info *pjob;
 					//char *send_buffer3 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)+
 					//				MAX_JOB_QUEUE*sizeof(batch_job_info));
@@ -477,53 +480,8 @@ void job_monitor_utransfer(){
 
 //depricated function to be (*removed*) in new version
 void job_monitor(){
-	
-	int portnumber;
-	char *send_buffer = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
-	char *recv_buffer = (char *)malloc(MSG_BUFF_SIZE);
-	
-	while(1){
-	
-	portnumber = UDP_JOB_MONITOR_SRV_PORT_NUMBER;
-	int num_req_nodes = 0;
-	int i;
-	int isavailable;
-	int server_machine_id = 1;
-	int nbytes;
-	nbytes = udp_recv(local_id,server_machine_id,recv_buffer,
-						MSG_BUFF_SIZE,portnumber);
-	int type = *((int *)recv_buffer);
-	int src  = *((int *)recv_buffer+1);
-	int dist = *((int *)recv_buffer+2);
-	int job_id = *((int *)recv_buffer+3);
-
-	switch(type){
-
-	case MSG_TYPE_JOB_CANCEL:
-	pthread_mutex_lock(&jobq_lock);
-	batch_job_info *job = &(jobq[job_id]);
-        int type = *((int *)recv_buffer);
-        int src  = *((int *)recv_buffer+1);
-        int dist = *((int *)recv_buffer+2);
-        int job_id = *((int *)recv_buffer+3);
-
-	fprintf(stderr,"job monitor act:cancel src:%d dist:%d job_id:%d\n",src,dist,job_id);
-        int i;
-        int host_id = 0;
-        for(i=1;i<=NUM_HOSTS;i++){
-	fprintf(stderr,"#i:%d job_id:%d nodesstat:%d\n",i,job_id,nodesstat[i]);
-                if(nodesstat[i] == job_id){
-                server_single_job_cancel(job_id,i);
-                }//server_single_job_cancel
-        }//for
-	pthread_mutex_unlock(&jobq_lock);
-	break;
-	
-	//case MSG_TYPE_JOB_SUBMIT:
-	//break;	
-	//default:
-	}//switch	
-	}//while
+	//while(1){
+	//}//while
 }//
 
 //depricated function to be (*removed*) in new version.
@@ -534,7 +492,7 @@ void job_status_query(){
 	char *recv_buffer = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
 	char *send_buffer = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
 
-	while(1){
+	while(true){
 	portnumber = UDP_JOB_STAT_SRV_PORT_NUMBER;
 	int num_req_nodes = 0;
 	int i;
@@ -595,7 +553,7 @@ void job_status_query(){
 	}//if job_id == -1
 
 	if(job_id == -2){
-	batch_job_info jobi[MAX_JOB_QUEUE];
+	//batch_job_info jobi[MAX_JOB_QUEUE];
 	batch_job_info *pjob;
 	char *send_buffer3 = (char *)malloc(MSG_HEAD_SIZE*sizeof(int)+
 						MAX_JOB_QUEUE*sizeof(batch_job_info));
@@ -677,16 +635,17 @@ void job_queue_pop(){
 	int job_id = 0;
 	for(i=0;i<MAX_NUM_HOSTS;i++){
 		pcstat[i] = HOST_STAT_FREE;
+		nodesstat[i] = -1;//no job assigned
 	}//for
 
 	int iter = 0;
-	while(1){
+	while(true){
 
 	batch_job_info *job = NULL;
 	sleep(1);
 
 	if(iter % 5 == 0){
-	fprintf(stderr,"job queue pop job_head:%d job_tail:%d\n",job_head,job_tail);
+fprintf(stderr,"job queue pop job_head:%d job_tail:%d\n",job_head,job_tail);
 	sleep(1);
 	}
 	iter++;
@@ -702,23 +661,26 @@ void job_queue_pop(){
 	job = &(jobq[job_tail]);
 
 	if(job == NULL){
-		fprintf(stderr,"error job queue pop job == NULL\n");
-		exit(1);
+		fprintf(stderr,"error: job queue pop pjob == NULL\n");
+		exit(-1);
 	}//if
 
 	job_id = job->job_id;
 	sprintf(pcomm, job->pcomm, strlen(job->pcomm));
 	num_req_nodes = job->num_req_nodes;
-	fprintf(stderr,"job queue pop pcomm:%s req_nodes:%d job_id:%d\n",
-								pcomm,num_req_nodes,job_id);
+	//fprintf(stderr,"job queue pop comm:%s req_nodes:%d job_id:%d \n",
+	//				pcomm,num_req_nodes,job_id);
 	job_tail = (job_tail+1)%MAX_JOB_QUEUE;
 	job->job_stat = JOB_STAT_RUNNING;
 	pthread_mutex_unlock(&jobq_lock);
 
 	count = 0;
-	while(1){
+	//todo if there is no enough nodes
+	bool get_enough_res = false;
+	if(num_req_nodes<=num_hosts){
+	while(true){
 	//count = 0;
-        for(i= 1;i<=NUM_HOSTS;i++){
+        for(i= 1;i<=num_hosts;i++){
 		if(pcstat[i] == HOST_STAT_FREE)
 			count++;
         }//for
@@ -730,18 +692,20 @@ void job_queue_pop(){
 		sleep(1);
 		continue;
 	}//if
-	if(count>=num_req_nodes)
+	if(count>=num_req_nodes){
+		get_enough_res = true;
 		break;
-
+	}
 	}//while
+	}//if(num_req_nodes<=num_hosts)
 
 	job->time2 = time(NULL);
-
+	if(get_enough_res){
         int k = 1;
         for(i=1;i<=num_req_nodes;i++){
-                for(k=1;k<=NUM_HOSTS;k++){
-			fprintf(stderr,"pcstat[%d]=(%d) FREE(%d) job_id:%d\n",
-				k,pcstat[k],HOST_STAT_FREE,job_id);
+                for(k=1;k<=num_hosts;k++){
+	fprintf(stderr,"[debug] pcstat[%d]=(%d) FREE(%d) BUSY(%d) job_id:%d\n",
+		k,pcstat[k],HOST_STAT_FREE,HOST_STAT_BUSY,job_id);
 			if(pcstat[k] == HOST_STAT_FREE){
 			nodesstat[k] 	= job_id;
 			pcstat[k] 	= HOST_STAT_BUSY;
@@ -751,13 +715,15 @@ void job_queue_pop(){
 		}//for
         }//for
 	jobnodes[job_id] = num_req_nodes;
-	fprintf(stderr,"#job queue (pop) num_req_nodes:%d job id:%d comm:%s",
+	fprintf(stderr,"#job queue (pop) num_req_nodes:%d job id:%d comm:%s\n",
 						num_req_nodes, job_id, pcomm);
+	}else
+	fprintf(stderr,"warning there is no enough nodes to run %s job_id:%d num_req_nodes:%d\n",pcomm,job_id,num_req_nodes);
+
 	/*for(k=1;k<=NUM_HOSTS;k++){
 		if(nodesstat[k] == job_id)
 			fprintf(stderr," ,%d",k);
-	}//for
-	fprintf(stderr,"\n");*/
+	}*///for
 	}//while
 }//void
 

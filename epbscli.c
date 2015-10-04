@@ -1,7 +1,9 @@
-
-//client end for easy pbs v0.2
-//www.bdyunmu.com
-//10/02/2015		lihui@indiana.edu
+/*
+client end for easy pbs v0.2
+copyright belongs to www.bdyunmu.com
+author:lihui@indiana.edu
+last update: 10/03/2015
+*/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -104,12 +106,18 @@ int main(int argc, char **argv){
 
 	case 2:
 	epbscli_init();
-	prog_2(qj_id);
+	//prog_2(qj_id);
+	client_query_job_status(qj_id);
 	break;
 
 	case 3:
+	{
 	epbscli_init();
-	prog_3(qh_id);
+	//prog_3(qh_id);
+	int result = client_query_host_status(qh_id);
+	if(result ==-1)
+	fprintf(stderr,"error server machine_id %d is not valid\n",qh_id);
+	}	
 	break;
 
 	case 4:
@@ -121,24 +129,18 @@ int main(int argc, char **argv){
 	return 0;
 }
 	void prog_2(int qj_id){
-
-	fprintf(stderr,"\t client query job stat:%d\n",qj_id);
-	int result = client_query_job_status(qj_id);
-
+	//fprintf(stderr,"\t client query job stat:%d\n",qj_id);
+	//int result = client_query_job_status(qj_id);
 	}//prog_2
 
 	void prog_3(int qh_id){
-	
-	fprintf(stderr,"\t client query host stat:%d\n",qh_id);
-	int result = client_query_host_status(qh_id);
-	
+	//fprintf(stderr,"\t client query host stat:%d\n",qh_id);
+	//int result = client_query_host_status(qh_id);
         }//prog_3
 	
 	void prog_4(int job_id){
-	
 	fprintf(stderr,"\t client job cancel:%d\n",job_id);
 	client_cancel_job(job_id);
-	
 	}//prog_4;
 
 int display_job_info(batch_job_info *pjob){
@@ -155,6 +157,7 @@ int display_job_info(batch_job_info *pjob){
 			asctime(tmt));
 	}//for
 	fprintf(stderr,"\n");
+	return 0;
 }
 
 int display_host_info(epbs_host_info *hosts){
@@ -165,6 +168,7 @@ int display_host_info(epbs_host_info *hosts){
 		phost = (epbs_host_info *)&(hosts[i]);
 		fprintf(stderr,"%d\t%d\t%d\t%s\n",i,phost->host_id,phost->host_stat,phost->ip);
 	}//for
+	return 0;
 }//int
 
 int client_query_job_status(int job_id){
@@ -251,7 +255,7 @@ int client_query_job_status(int job_id){
 						bExit = true;
 						cerr<<"connection closed."<<endl;
 						break;
-					}else if(send_size = send_buffer_len){
+					}else if(send_size == send_buffer_len){
 						//cerr<<"client query job status send is done."<<endl;
 						pf.events = UPOLL_READ_T;
 						src.clear();
@@ -381,7 +385,7 @@ int client_query_job_status(int job_id){
 
 int client_query_host_status(int machine_id){
 
-	if(machine_id < 0)
+	if(machine_id < 0 || machine_id>num_hosts)
 	return -1;
   	//struct hostent *host = gethostbyname(hosts[machine_id]);
         //int remote_fd  = socket(AF_INET,SOCK_DGRAM,0);
@@ -403,8 +407,9 @@ int client_query_host_status(int machine_id){
 	memcpy(send_buffer+2*sizeof(int),(char *)&dist,sizeof(int));
 	memcpy(send_buffer+3*sizeof(int),(char *)&machine_id,sizeof(int));
 	UTransfer *transfer = UTransfer::get_instance();
-	string host_ip = get_host_ip(machine_id);
-	//string host(host_ip);
+	char* hip = get_host_ip(server_machine_id);
+	if(hip==NULL)return -1; //server_machine_id is not valid
+	string host_ip(hip);
 	unsigned short port = portnumber;
 	CSockAddr raddr(host_ip,port);
 	USocket *tcp_sock1;
@@ -436,6 +441,7 @@ int client_query_host_status(int machine_id){
 					return -1;	
 					}else if(it->events & UPOLL_WRITE_T)
 					{
+	cerr<<"debug connected to server portnumber:"<<portnumber<<endl;
 					wait_creating = false;
 					}
 				}//if
@@ -558,7 +564,7 @@ void client_cancel_job(int job_id){
 	int src = local_id;
 	int server_machine_id = 1;
 	int dist = server_machine_id;
-	int nbytes;
+	//int nbytes;
 	char *send_buffer_head = (char *)malloc(sizeof(int)*MSG_HEAD_SIZE);
 	*(int *)send_buffer_head = type;
 	*((int *)send_buffer_head+1) = src;
@@ -793,15 +799,14 @@ if(transfer->create_socket(tcp_sock1, &raddr,SOCK_TYPE_TCP)==0)
 
 
 void client_submit_job_done(){
-	int i= 0;
+	//int i= 0;
 	//for(i=1;i<=num_hosts;i++){
 	//}//for
 }//void
 
-//todo need recover #if 0
 void epbscli_init()
 {
-	host_configure(hostfile);
+	read_host_config_file(hostfile);
     	if(num_hosts <1){
                 fprintf(stderr,"error! num_hosts is less than one\n");
                 exit(1);
