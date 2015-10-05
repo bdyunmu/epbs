@@ -15,9 +15,9 @@ CXX=g++
 all: $(TARGET)
 
 eTransfer.o:
-	g++ -g /home/p2plive/epbs/epbs/eTransfer/eTransfer.cpp ${LIBDIR} ${INCLUDE} $(libs)
+	g++ -c /home/p2plive/epbs/epbs/eTransfer/eTransfer.cpp ${LIBDIR} ${INCLUDE} $(libs)
 
 libetransfer.a: eTransfer.o
-	ar cru eTransfer.o
+	ar cru libetransfer.a eTransfer.o
 clean:
 	rm -f $(TARGET) $(OBJS) $(TOPDIR)/*.o

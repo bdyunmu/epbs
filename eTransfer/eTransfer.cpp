@@ -1,11 +1,18 @@
 #include <stdexcept>
 #include <fcntl.h>
-#include "utransfer.h"
+//#include "utransfer.h"
 #include "Utility.h"
-#include "rubuffer.h"
+//#include "rubuffer.h"
 #include "exceptions.h"
+#include "eTransfer.h"
 
 using std::runtime_error;
+
+int eTransfer::MY_TIMEVAL_TO_TIMESPEC(struct timeval *tv,struct timespec *ts) {
+	(ts)->tv_sec = (tv)->tv_sec;
+	(ts)->tv_nsec = (tv)->tv_usec * 1000;	
+	return 0;
+}//int
 
 eTransfer* eTransfer::get_instance()
 {
@@ -53,7 +60,7 @@ int eTransfer::set_conn_set(fd_set&rset,fd_set&wset,fd_set&eset)
 	for(;it!=end;it++)
 	{
 		socket = it->second;
-		sock = it->m_sock;
+		sock = socket->m_sock;
 		if(sock>max_conn)
 			max_conn = sock;
 		if(socket->m_bneedreadselect)
@@ -99,7 +106,7 @@ int eTransfer::proc_tcp_socket(fd_set& rset, fd_set&wset, fd_set&eset, list<USoc
 			socket->m_bneedreadselect = false;
 			socket->m_bneedwriteselect = false;
 			continue;
-		}	
+		}
 		if(FD_ISSET(sock,&wset))
 			socket->m_bneedwriteselect = false;
 		if(FD_ISSET(sock,&rset))
@@ -259,12 +266,15 @@ int eTransfer::init_tcp(int port)
 	
 	sock_opt = 1;
 	if(setsockopt(m_tcp_sock,SOL_SOCKET,SO_REUSEADDR,(char *)&sock_opt,sizeof(sock_opt))<0)
-	goto _ERROR;
+	ret = -1;	
+	//goto _ERROR;
 	if(CNetAux::setSockNonBlocking(m_tcp_sock)<0)
-	goto _ERROR;
+	ret = -1;	
+	//goto _ERROR;
 	sock_opt = 1024*256;
 	if(setsockopt(m_tcp_sock,SOL_SOCKET,SO_RCVBUF,(char *)&sock_opt,sizeof(sock_opt))<0)
-	goto _ERROR;
+	ret = -1;	
+	//goto _ERROR;
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
 	int try_limit = 0;	
@@ -276,12 +286,12 @@ int eTransfer::init_tcp(int port)
 			if(CUtility::GetLastErr() == EADDRINUSE)
 				port = 10000+(CUtility::Random()%10000);
 			else
-				goto _ERROR;
+				ret = -1;//goto _ERROR;
 		}//if
 		else
 		{
 			if(listen(m_tcp_sock,5)<0)
-				goto _ERROR;
+				ret = -1;//goto _ERROR;
 			break;
 		}//else
 	}	
@@ -294,7 +304,7 @@ int eTransfer::init_tcp(int port)
 	m_tcp_port = port;
 	m_tcp_listener = new UTcpSocket();
 	return 0;
-_ERROR:
+//_ERROR:
 	ret = CUtility::GetLastErr();
 	CLOSESOCKET(m_tcp_sock);
 	m_tcp_sock = -1;
