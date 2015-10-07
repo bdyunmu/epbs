@@ -14,4 +14,7 @@
 
 void host_query();
 void host_monitor_transfer_0();
+void host_monitor_transfer_1();
+void host_monitor_transfer_2();
+
 #endif

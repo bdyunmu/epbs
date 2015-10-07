@@ -16,7 +16,7 @@ void *host_srv_process(void *);
 void hostq_init();
 void epbs_host_status();
 extern "C"{
-void host_configure(char *hostfile);
+void read_host_config_file(char *hostfile);
 }
 //void host_query();
 char *get_host_ip(int dist_id);

@@ -37,9 +37,11 @@ int single_job_submit(int local_id, int remote_id, char *command, int num_req_no
 void server_single_job_submit(int local_id, int remote_id, char *command, int job_id);
 void server_single_job_cancel(int job_id_, int host_id_);
 void cancel_job_request();
-void job_monitor();
-void job_monitor_utransfer();//new 9/30/2015
-void job_queue_result();
+void job_monitor();//depricated
+void job_monitor_utransfer();//depricated 9/30/2015
+void job_monitor_etransfer();//new 10/7/2015
+void job_queue_result_0();
+void job_queue_result_1();
 void job_status_query();
 void job_queue_pop();
 void job_queue_push();

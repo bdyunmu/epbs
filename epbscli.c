@@ -41,8 +41,9 @@ void epbscli_init();
 //void client_submit_job_done();
 //void client_cancel_job(int );
 void prog_2(int );
-void prog_3(int );
+//void prog_3(int );
 void prog_4(int );
+int client_query_host_status_0(int qh_id);
 
 int main(int argc, char **argv){
 	int i = 0;
@@ -114,7 +115,7 @@ int main(int argc, char **argv){
 	{
 	epbscli_init();
 	//prog_3(qh_id);
-	int result = client_query_host_status(qh_id);
+	int result = client_query_host_status_0(qh_id);
 	if(result ==-1)
 	fprintf(stderr,"error server machine_id %d is not valid\n",qh_id);
 	}	
@@ -163,8 +164,8 @@ int display_job_info(batch_job_info *pjob){
 int display_host_info(epbs_host_info *hosts){
 	int i;
 	epbs_host_info *phost;
-	fprintf(stderr,"ID\tHID\tSTAT\tIP\n");
-	for(i=0;i<MAX_NUM_HOSTS;i++){
+	fprintf(stderr,"\nID\tHID\tSTAT\tIP\n");
+	for(i=0;i<num_hosts;i++){
 		phost = (epbs_host_info *)&(hosts[i]);
 		fprintf(stderr,"%d\t%d\t%d\t%s\n",i,phost->host_id,phost->host_stat,phost->ip);
 	}//for
@@ -382,7 +383,74 @@ int client_query_job_status(int job_id){
 #endif
 	return 0;
 }//
+int client_query_host_status_0(int machine_id){
 
+	if(machine_id < 0 || machine_id>num_hosts)
+	return -1;
+	int portnumber = UDP_HOST_MONITOR_SRV_PORT_NUMBER;
+	int server_machine_id = 1;
+	char* hostip = get_host_ip(server_machine_id); 	
+	UTcpSocket *socket = new UTcpSocket();
+	string host(hostip);
+	CSockAddr raddr(host,portnumber);
+	int re1 = socket->init(raddr);
+	int re2 = socket->connect();
+	if(re1 == 0 && re2 == 0){
+	//fprintf(stderr,"(create socket success) port(%d)\n",portnumber);
+	}else{
+	int err = socket->get_reason();
+	return err;
+	}//else
+	int send_buffer_len  	= sizeof(int)*MSG_HEAD_SIZE;
+	char *send_buffer  	= (char *)malloc(send_buffer_len);
+	char *recv_buffer 	= (char *)malloc(MSG_BUFF_SIZE);
+
+	int recv_size = 0;
+	int send_size = 0;
+	int type = MSG_TYPE_HOST;
+	int src = local_id;
+	int dist = machine_id;
+	memcpy(send_buffer,(char *)&type,sizeof(int));
+	memcpy(send_buffer+1*sizeof(int),(char *)&src,sizeof(int));
+	memcpy(send_buffer+2*sizeof(int),(char *)&dist,sizeof(int));			
+	memcpy(send_buffer+3*sizeof(int),(char *)&machine_id,sizeof(int));
+	if(socket->can_write()){
+	send_size = socket->send(send_buffer,send_buffer_len,NULL);
+	}
+	//fprintf(stderr,"(socket->send=send_size:%d)\n",send_size);
+	if(send_size == send_buffer_len){
+	int remain_size = MSG_BUFF_SIZE;
+	while(remain_size>0){
+		if(socket->can_read()){
+		recv_size = socket->recv(recv_buffer,MSG_BUFF_SIZE,NULL);
+		remain_size -= recv_size;
+		sleep(1);
+		}//if
+	}//while(remain_size>0)
+	}//if(send_size == send_buffer_lne);
+	recv_size = MSG_BUFF_SIZE;
+	if(recv_size > 0 && machine_id >= 1){
+		fprintf(stderr,"\nHID\t HSTAT\n");
+		for(int i = 0;i<num_hosts;i++){
+int stat = *(int *)(recv_buffer+sizeof(int)*MSG_HEAD_SIZE+i*sizeof(int));
+		fprintf(stderr,"%d\t%d\n",i,stat);
+		}//for
+	}//if
+	if(recv_size>0&&machine_id == 0){
+	epbs_host_info *phost = NULL;
+	epbs_host_info hostinfo[MAX_NUM_HOSTS];
+	for(int i = 0;i<num_hosts;i++){
+		phost = (epbs_host_info *)(recv_buffer+
+			MSG_HEAD_SIZE*sizeof(int)+sizeof(epbs_host_info)*i);
+		hostinfo[i].host_id = phost->host_id;
+		hostinfo[i].host_stat = phost->host_stat;
+		strncpy(hostinfo[i].ip,phost->ip,32);		
+	}//for
+	display_host_info(hostinfo);
+	}//if
+}
+
+//depricated version uses the utransfer
 int client_query_host_status(int machine_id){
 
 	if(machine_id < 0 || machine_id>num_hosts)

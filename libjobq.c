@@ -26,7 +26,8 @@ last update:9/16/2015
 #include "libjobq.h"
 
 #include "PPTimers.h"
-#include "utransfer.h"
+//#include "utransfer.h"
+#include "eTransfer.h"
 
 batch_job_info jobq[MAX_JOB_QUEUE];
 
@@ -216,14 +217,15 @@ void cancel_job_request(){
         }//while
 
 }//void
-
-
-
+	
+	
+	
  	//job_stat_query
  	//job_submit
  	//job_cancel
-
-void job_monitor_utransfer(){
+	
+//void job_monitor_utransfer(){
+  void job_monitor_etransfer(){
 	
 	//merge the service for UDP_JOB_QUE_SRV_PORT_NUMBER
 	int portnumber = UDP_JOB_MONITOR_SRV_PORT_NUMBER;
@@ -233,7 +235,7 @@ void job_monitor_utransfer(){
 	
 	char recv_buffer[MSG_BUFF_SIZE];
 	//char send_buffer[MSG_BUFF_SIZE];	
-	UTransfer *transfer = UTransfer::get_instance();
+	eTransfer *transfer = new eTransfer();
 	transfer->init_tcp(portnumber);
 	list<upoll_t> src;
 	list<upoll_t> dst;
@@ -281,7 +283,7 @@ void job_monitor_utransfer(){
 						}
 					}
 				}else if(up.events & UPOLL_WRITE_T){
-				send_size = it->usock->send((char *)(it->pointer),MSG_BUFF_SIZE,NULL);
+			send_size = it->usock->send((char *)(it->pointer),MSG_BUFF_SIZE,NULL);
 				free(it->pointer);
 				it->pointer = NULL;
 				transfer->destroy_socket(it->usock);
@@ -582,8 +584,92 @@ void job_status_query(){
 }//void
 
 //help function that retrieve local values
-void job_queue_result(){
+void job_queue_result_1(){
+	eTransfer *transfer = new eTransfer();
+	int portnumber = UDP_JOB_RELT_SRV_PORT_NUMBER;
+	int recv_size  = 0;
+	char *recv_buffer = (char *)malloc(sizeof(char)*MSG_BUFF_SIZE);
+	transfer->init_tcp(portnumber);
+	list<upoll_t> src;
+	list<upoll_t> dst;
+	list<upoll_t>::iterator it;
+	USocket *tcp_listener = transfer->get_tcp_listener();
+	upoll_t ls_poll;
+	ls_poll.events = UPOLL_READ_T;
+	ls_poll.pointer = NULL;
+	ls_poll.usock = tcp_listener;
+	src.push_back(ls_poll);
+	map<USocket*,upoll_t>m_tcp_map;
+	struct timeval base_tm = {0,100};
+	struct timeval wait_tm;
+	while(true)
+	{
+		dst.clear();
+		src.clear();
+		map<USocket*,upoll_t>::iterator mit;
+		for(mit = m_tcp_map.begin();mit!=m_tcp_map.end();mit++)
+			src.push_back(mit->second);
+		src.push_back(ls_poll);
+		wait_tm = base_tm;	
+		transfer->walk_through();
+		int res = transfer->select(dst,src,&wait_tm);
+		if(res>0)
+		{
+			for(it=dst.begin();it!=dst.end();it++)
+			{
+				upoll_t up = *it;
+				if(up.usock == tcp_listener)
+				{
+					if(up.events&UPOLL_READ_T)
+					{
+						USocket *sc = transfer->accept(tcp_listener);
+						if(sc)
+						{
+							upoll_t new_up;
+							new_up.pointer = NULL;
+							new_up.usock = sc;
+							new_up.events = UPOLL_READ_T;
+							m_tcp_map[sc] = new_up;
+						}//if
+					}//if
+				}else if(up.events & UPOLL_READ_T)
+				{
+					recv_size = it->usock->recv(recv_buffer,MSG_BUFF_SIZE,NULL);
+					int type = *((int *)recv_buffer);
+					int src = *((int *)recv_buffer+1);
+					int dist = *((int *)recv_buffer+2);
+					int job_id = *((int *)recv_buffer+3);
+					int job_relt = *((int *)recv_buffer+4);
+					if(job_relt == JOB_STAT_FINISHED){
+					pcstat[src] = HOST_STAT_FREE;
+					jobnodes[job_id]--;
+					if(jobnodes[job_id] == 0){
+						pthread_mutex_lock(&jobq_lock);
+						jobq[job_id].job_stat = JOB_STAT_FINISHED;
+						jobq[job_id].time3 = time(NULL);
+						pthread_mutex_unlock(&jobq_lock);
+					}//if
+					}//job_relt == JOB_STAT_FREE;
+				transfer->destroy_socket(it->usock);
+				m_tcp_map.erase(it->usock);
+				}else if(up.events & UPOLL_WRITE_T)
+				{
+				transfer->destroy_socket(it->usock);
+				m_tcp_map.erase(it->usock);	
+				}else if(up.events & UPOLL_ERROR_T)
+				{
+				cerr<<"SYSTEM ERROR"<<endl;
+				transfer->destroy_socket(it->usock);
+				m_tcp_map.erase(it->usock);
+				}//else if(up.events & UPOLL_ERROR_T)
+			}//for
+		}
+	}//while
 
+}//void
+
+void job_queue_result_0(){
+#if 0
 	int portnumber = UDP_JOB_RELT_SRV_PORT_NUMBER;
 	int count = 0;
 	fprintf(stderr,"job queue result thread portnumber:%d\n",portnumber);
@@ -614,10 +700,9 @@ void job_queue_result(){
 		jobq[job_id].time3 = time(NULL);
 		pthread_mutex_unlock(&jobq_lock);
 	}//if(jobnodes[job_id] == 0)
-
 	}//if
-	
 	}//while
+#endif
 }
 
 

@@ -1,7 +1,9 @@
-
-//server for easy pbs v0.3
-//www.bdyunmu.com
-//09/16/2015   	lihui@indiana.edu
+/*
+server component for easy pbs v0.2
+copyright belongs to www.bdyunmu.com
+author:lihui@indiana.edu
+last update:09/16/2015
+*/
 
 //1. memory management
 //	if msg send larger than 1MB
@@ -27,8 +29,9 @@
 #include "libmsg.h"
 #include "libhost.h"
 #include "libjobq.h"
-#include "utransfer.h"
+//#include "utransfer.h"
 #include "host_monitor.h"
+#include "eTransfer.h"
 
 extern int  local_id;
 //char hostname[64];
@@ -44,29 +47,26 @@ extern pthread_mutex_t jobq_lock;
 extern int job_head;
 extern int job_tail;
 
-extern int pipes[2];
+extern int  pipes[2];
 extern char hostfile[64];
-extern int local_machine_stat;
+extern int  local_machine_stat;
 
 extern batch_job_info jobq[MAX_JOB_QUEUE];
 extern epbs_host_info hostq[(MAX_NUM_HOSTS+1)];
 
 extern char *ips[(MAX_NUM_HOSTS+1)];
 extern char *hosts[(MAX_NUM_HOSTS+1)];  //server   hosts
-		  		 //hosts[0] master nodes
+		  		 	//hosts[0] master nodes
 void *client_thread(void *arg)
 {
 
 }//void
 
 void epbssrv_configure(){
-
 	sprintf(hostfile,"hosts");
-	host_configure("hosts");
+	read_host_config_file(hostfile);
 	hostq_init();
-
-	fprintf(stderr,"epbssrv_configure.\n");
-	
+	fprintf(stderr,"(epbssrv_configure)\n");
 	local_machine_stat = 0;
 	int i;
 	pthread_mutex_lock(&jobq_lock);
@@ -79,7 +79,6 @@ void epbssrv_configure(){
 		job->pcomm[0] = '\0';
 	}//for
 	pthread_mutex_unlock(&jobq_lock);
-		
 }//void
 
 //[type][src][dist][payload_len]
@@ -95,7 +94,7 @@ void deal_msg_request(){
         if((srv_listen_fd=socket(AF_INET,SOCK_STREAM,0))==-1)
         {
         fprintf(stderr,"socket error:%s\n\a",strerror(errno));
-        exit(1);
+        exit(-1);
         }//if
         struct sockaddr_in server_addr;
         struct sockaddr_in client_addr;
@@ -112,22 +111,22 @@ void deal_msg_request(){
         if(bind(srv_listen_fd,(struct sockaddr *)(&server_addr),sizeof(struct sockaddr))==-1)
         {
         fprintf(stderr,"deal msg request bind error:%s\n\a",strerror(errno));
-        exit(1);
+        exit(-1);
         }//if
 
         if(listen(srv_listen_fd,5)==-1)
         {
         fprintf(stderr,"listen error:%s\n\a",strerror(errno));
-        exit(1);
+        exit(-1);
         }//if
 
-	while(1){
+	while(true){
 
 	int sin_size=sizeof(struct sockaddr_in);
         if((srv_fd=accept(srv_listen_fd,(struct sockaddr *)(&client_addr),(socklen_t *)&sin_size))==-1)
         {
         fprintf(stderr,"accept error:%s\n\a",strerror(errno));
-        exit(1);
+        exit(-1);
         }//if
         else
         {
@@ -146,50 +145,66 @@ void deal_msg_request(){
 
 	close(srv_fd);
 	close(srv_listen_fd);
-
 }
 
 
 void *host_status_thread(void *argv){
 	epbs_host_status();
+	return NULL;
 }
 
 void *cancel_job_thread(void *argv){
 	cancel_job_request();
+	return NULL;
 }//void
 
-void *host_query_thread(void *argv){
+void *host_monitor_thread(void *argv){
 	//host_query();
-	host_monitor_transfer_0();
+	//host_monitor_transfer_0();
+	host_monitor_transfer_2();
+	return NULL;
 }//void
+void host_monitor_process(){
+	//host_monitor_transfer_1();
+	//version 1 is depricated using the UTcpSocket
+	host_monitor_transfer_2();
+}	//host_monitor_process();
 
 void *interactive_job_thread(void *argv){
 	deal_interactive_job_request();
+	return NULL;
 }//void
 
 void *job_queue_push_thread(void *argv){
 	job_queue_push();
+	return NULL;
 }//void
 
 void *job_queue_pop_thread(void *argv){
 	job_queue_pop();
+	return NULL;
 }//void
 
 void *job_status_query_thread(void *argv){
 	job_status_query();
+	return NULL;
 }//void
 
 void *job_queue_result_thread(void *argv){
-	job_queue_result();
+	job_queue_result_1();
+	return NULL;
 }//void
 
 void *msg_process(void *argv){
 	deal_msg_request();
+	return NULL;
 }//void
 
 void *job_monitor_thread(void *argv){
 	//job_monitor();
-	job_monitor_utransfer();
+	//job_monitor_utransfer();
+	job_monitor_etransfer();
+	return NULL;
 }//void
 
 int main(int argc, char **argv){
@@ -229,14 +244,16 @@ int main(int argc, char **argv){
 
 	if(local_id == 1){
 	pthread_create(&pid_job_monitor,NULL,job_monitor_thread,NULL);
-	pthread_create(&pid_job_push_queue, NULL, job_queue_push_thread, NULL);
+	//pthread_create(&pid_job_push_queue, NULL, job_queue_push_thread, NULL);
 	pthread_create(&pid_job_pop_queue, NULL, job_queue_pop_thread, NULL);
-	pthread_create(&pid_job_query, NULL, job_status_query_thread,NULL);
+	//pthread_create(&pid_job_query, NULL, job_status_query_thread,NULL);
 	pthread_create(&pid_job_result,NULL, job_queue_result_thread,NULL);
-	pthread_create(&pid_host_query, NULL, host_query_thread,NULL);
+	pthread_create(&pid_host_query, NULL, host_monitor_thread,NULL);
 	pthread_create(&pid_host_stat, NULL, host_status_thread,NULL);
 	}//if
-
+	//pid_t fpid = fork();
+	//if(fpid !=0){
+		//it is the parent process the pid of child is fpid
 	pthread_join(pid_job,NULL);
 	pthread_join(pid_msg,NULL);
 	pthread_join(pid_host,NULL);
@@ -244,12 +261,17 @@ int main(int argc, char **argv){
 	if(local_id == 1){
 	pthread_join(pid_job_monitor,NULL);
 	pthread_join(pid_job_pop_queue,NULL);
-	pthread_join(pid_job_push_queue,NULL);
-	pthread_join(pid_job_query,NULL);
+	//pthread_join(pid_job_push_queue,NULL);
+	//pthread_join(pid_job_query,NULL);
 	pthread_join(pid_job_result,NULL);
-	pthread_join(pid_host_query,NULL);
+	//pthread_join(pid_host_query,NULL);
 	pthread_join(pid_host_stat,NULL);
 	}//if
+	//}else if (fpid==0){	//it is the child process 
+	//fprintf(stderr,"host_monitor_process\n");
+	//host_monitor_process();	
+	//}
+	return 0;
 
 }//int main
 

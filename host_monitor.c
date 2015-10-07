@@ -1,5 +1,5 @@
 
-//host component for easy pbs v0.2
+//(host component for easy pbs v0.2)
 //www.bdyunmu.com
 //9/16/2015
 
@@ -38,8 +38,9 @@ extern pthread_mutex_t hostq_lock;
 
 //version 2 uses the etransfer
 void host_monitor_transfer_2(){
+
 	int portnumber = UDP_HOST_MONITOR_SRV_PORT_NUMBER;
-	fprintf(stderr,"(host_monitor_transfer_1:%d)\n",portnumber);
+	fprintf(stderr,"(host_monitor_transfer_2:%d)\n",portnumber);
 	//int type = MSG_TYPE_HOST;
 	//int src = local_id;
 	//int dist = 0;
@@ -49,10 +50,10 @@ void host_monitor_transfer_2(){
 	char *send_buffer = NULL;//(char *)malloc(send_buffer_len);
 	char *recv_buffer = (char *)malloc(MSG_BUFF_SIZE);
 	int recv_size = 0;
-	int send_size = 0; 	
+	int send_size = 0;
 
 	eTransfer *transfer = new eTransfer();
-	transfer->init_tcp(4323);
+	transfer->init_tcp(portnumber);
 	UTcpSocket *tcp_listener = transfer->get_tcp_listener();
 	list<upoll_t> src;
 	list<upoll_t> dst;
@@ -88,7 +89,7 @@ void host_monitor_transfer_2(){
 						USocket *sc = transfer->accept(tcp_listener);
 						if(sc)
 						{
-							cerr<<"transfer->accept"<<endl;
+							//cerr<<"transfer->accept"<<endl;
 							upoll_t new_up;
 							new_up.pointer = NULL;
 							new_up.usock = sc;
@@ -111,6 +112,7 @@ void host_monitor_transfer_2(){
 					int src_ = *((int*)recv_buffer+1);
 					int dist_ = *((int*)recv_buffer+2);
 					int qh_id = *((int*)recv_buffer+3);
+					//assert(dist_==local_id)
 					if(qh_id>=1){
 						*((int *)send_buffer) = type_;
 						*((int *)send_buffer+1) = local_id;
@@ -120,15 +122,15 @@ void host_monitor_transfer_2(){
 						*((int *)send_buffer+MSG_HEAD_SIZE+i)= pcstat[i];
 						}
 					}//if
-					if(qh_id == 0){
+					if(qh_id==0){
 						*((int *)send_buffer) = type_;
 						*((int *)send_buffer+1) = local_id;
 						*((int *)send_buffer+2) = src_;
 						*((int *)send_buffer+3) = qh_id;
 						pthread_mutex_lock(&hostq_lock);
-						for(int i = 0;i<num_hosts;i++){
+						for(int i=0;i<num_hosts;i++){
 						epbs_host_info *phost = (epbs_host_info *)(send_buffer+
-						sizeof(int)*MSG_HEAD_SIZE+sizeof(epbs_host_info)*i);
+							sizeof(int)*MSG_HEAD_SIZE+sizeof(epbs_host_info)*i);
 						phost->host_stat = hostq[i].host_stat;
 						phost->host_id = i+1;
 						strncpy(phost->ip,hostq[i].ip,32);
@@ -147,10 +149,12 @@ void host_monitor_transfer_2(){
 				}else if(up.events & UPOLL_ERROR_T)
 				{
 					cerr<<"SYSTEM ERROR"<<endl;
+					transfer->destroy_socket(it->usock);
+					m_tcp_map.erase(it->usock);
 					continue;
 				}
 			}
-		}//if(res>0)		
+		}//if(res>0)
 	}//while(true)
 	return;
 }//
